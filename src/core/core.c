@@ -309,6 +309,32 @@ bool mCoreAutoloadCheats(struct mCore* core) {
 	return success;
 }
 
+bool mCoreAutoloadCheatsFromFile(struct mCore* core,char* cheatfile) {
+    bool success = true;
+    int cheatAuto;
+    struct mCheatDevice* device = core->cheatDevice(core);
+    mCheatDisableAll(device);
+    if (!mCoreConfigGetIntValue(&core->config, "cheatAutoload", &cheatAuto) || cheatAuto) {
+        struct VFile* vf;
+        if (cheatfile) {
+            vf = VFileOpen(cheatfile, O_RDONLY);;
+
+        } else {
+            vf = mDirectorySetOpenSuffix(&core->dirs, core->dirs.cheats, ".cheats", O_RDONLY);
+        }
+
+        if (vf) {
+            success = mCheatParseFile(device, vf);
+            vf->close(vf);
+        }
+    }
+    if (!mCoreConfigGetIntValue(&core->config, "cheatAutosave", &cheatAuto) || cheatAuto) {
+        struct mCheatDevice* device = core->cheatDevice(core);
+        device->autosave = true;
+    }
+    return success;
+}
+
 bool mCoreSaveState(struct mCore* core, int slot, int flags) {
 	struct VFile* vf = mCoreGetState(core, slot, true);
 	if (!vf) {
