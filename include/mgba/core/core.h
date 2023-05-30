@@ -181,7 +181,7 @@ bool mCorePreloadFileCB(struct mCore* core, const char* path, void (cb)(size_t, 
 bool mCoreAutoloadSave(struct mCore* core);
 bool mCoreAutoloadPatch(struct mCore* core);
 bool mCoreAutoloadCheats(struct mCore* core);
-
+bool mCoreAutoloadCheatsFromFile(struct mCore* core,char* cheatfile);
 bool mCoreLoadSaveFile(struct mCore* core, const char* path, bool temporary);
 
 bool mCoreSaveState(struct mCore* core, int slot, int flags);

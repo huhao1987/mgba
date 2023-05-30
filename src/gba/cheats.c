@@ -176,7 +176,7 @@ bool GBACheatAddVBALine(struct GBACheatSet* cheats, const char* line) {
 		value |= op;
 		++width;
 	}
-	if (width == 0 || width == 3) {
+	if (width == 0) {
 		return false;
 	}
 
