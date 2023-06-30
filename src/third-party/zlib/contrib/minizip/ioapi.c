@@ -24,7 +24,16 @@
 #define FTELLO_FUNC(stream) ftello64(stream)
 #define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
 #endif
-
+#ifdef ANDROID
+#  define fopen64 fopen
+#  ifdef __USE_FILE_OFFSET64
+#    define ftello64 ftello
+#    define fseeko64 fseeko
+#  else
+#    define ftello64 ftell
+#    define fseeko64 fseek
+#  endif
+#endif
 
 #include "ioapi.h"
 
