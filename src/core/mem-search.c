@@ -30,7 +30,10 @@ static bool _op(int32_t value, int32_t match, enum mCoreMemorySearchOp op) {
 	}
 	return false;
 }
-
+uint32_t* getBlock(const void* mem){
+    const uint32_t* mem32 = mem;
+    return mem32;
+}
 static size_t _search32(const void* mem, size_t size, const struct mCoreMemoryBlock* block, uint32_t value32, enum mCoreMemorySearchOp op, struct mCoreMemorySearchResults* out, size_t limit) {
 	const uint32_t* mem32 = mem;
 	size_t found = 0;

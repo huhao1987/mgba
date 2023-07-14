@@ -291,6 +291,8 @@ struct mCoreMemoryBlock {
 	uint32_t flags;
 	uint16_t maxSegment;
 	uint32_t segmentStart;
+    uint32_t* mem;
+
 };
 
 enum mCoreRegisterType {
