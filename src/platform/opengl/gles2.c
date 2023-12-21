@@ -36,7 +36,7 @@ static const GLchar* const _gl32FHeader =
 	"out vec4 compat_FragColor;\n"
 	"#define gl_FragColor compat_FragColor\n";
 
-char* _vertexShader =
+static const char* const _vertexShader =
 	"attribute vec4 position;\n"
 	"varying vec2 texCoord;\n"
 
@@ -54,7 +54,7 @@ static const char* const _nullVertexShader =
 	"	texCoord = (position.st + vec2(1.0, 1.0)) * vec2(0.5, 0.5);\n"
 	"}";
 
-char* _fragmentShader =
+static const char* const _fragmentShader =
 	"varying vec2 texCoord;\n"
 	"uniform sampler2D tex;\n"
 	"uniform float gamma;\n"
@@ -101,8 +101,8 @@ static const GLfloat _vertices[] = {
 static void mGLES2ContextInit(struct VideoBackend* v, WHandle handle) {
 	UNUSED(handle);
 	struct mGLES2Context* context = (struct mGLES2Context*) v;
-	v->width = -3;
-	v->height = -3;
+	v->width = 1;
+	v->height = 1;
 	glGenTextures(1, &context->tex);
 	glBindTexture(GL_TEXTURE_2D, context->tex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -112,79 +112,50 @@ static void mGLES2ContextInit(struct VideoBackend* v, WHandle handle) {
 	glBindBuffer(GL_ARRAY_BUFFER, context->vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(_vertices), _vertices, GL_STATIC_DRAW);
 
-	struct mGLES2Uniform* uniforms = malloc(sizeof(struct mGLES2Uniform) * 1);
-    //[pass.0.uniform.boundBrightness]
-    uniforms[0].name = "boundBrightness";
-    uniforms[0].readableName = "Bound brightness";
-    uniforms[0].type = GL_FLOAT;
-    uniforms[0].value.f = 0.9f;
-    uniforms[0].min.f = 0.0f;
-    uniforms[0].max.f = 1.0f;
-
-//    uniforms[1].name = "XBR_EQ_THRESHOLD";
-//    uniforms[1].readableName = "Eq Threshold";
-//    uniforms[1].type = GL_FLOAT;
-//    uniforms[1].value.f = 25.0f;
-//    uniforms[1].min.f = 0.0f;
-//    uniforms[1].max.f = 50.0f;
-//
-//    uniforms[2].name = "XBR_SCALE";
-//    uniforms[2].readableName = "xBR Scale";
-//    uniforms[2].type = GL_FLOAT;
-//    uniforms[2].value.f = 4.0f;
-//    uniforms[2].min.f = 1.0f;
-//    uniforms[2].max.f = 5.0f;
-//
-//    uniforms[3].name = "XBR_LV2_COEFFICIENT";
-//    uniforms[3].readableName = "Lv2 Coefficient";
-//    uniforms[3].type = GL_FLOAT;
-//    uniforms[3].value.f = 2.0f;
-//    uniforms[3].min.f = 1.0f;
-//    uniforms[3].max.f = 3.0f;
-
-//	uniforms[0].name = "gamma";
-//	uniforms[0].readableName = "Gamma";
-//	uniforms[0].type = GL_FLOAT;
-//	uniforms[0].value.f = 1.0f;
-//	uniforms[0].min.f = 0.1f;
-//	uniforms[0].max.f = 3.0f;
-//	uniforms[1].name = "scale";
-//	uniforms[1].readableName = "Scale";
-//	uniforms[1].type = GL_FLOAT_VEC3;
-//	uniforms[1].value.fvec3[0] = 1.0f;
-//	uniforms[1].value.fvec3[1] = 1.0f;
-//	uniforms[1].value.fvec3[2] = 1.0f;
-//	uniforms[1].min.fvec3[0] = -1.0f;
-//	uniforms[1].min.fvec3[1] = -1.0f;
-//	uniforms[1].min.fvec3[2] = -1.0f;
-//	uniforms[1].max.fvec3[0] = 2.0f;
-//	uniforms[1].max.fvec3[1] = 2.0f;
-//	uniforms[1].max.fvec3[2] = 2.0f;
-//	uniforms[2].name = "bias";
-//	uniforms[2].readableName = "Bias";
-//	uniforms[2].type = GL_FLOAT_VEC3;
-//	uniforms[2].value.fvec3[0] = 0.0f;
-//	uniforms[2].value.fvec3[1] = 0.0f;
-//	uniforms[2].value.fvec3[2] = 0.0f;
-//	uniforms[2].min.fvec3[0] = -1.0f;
-//	uniforms[2].min.fvec3[1] = -1.0f;
-//	uniforms[2].min.fvec3[2] = -1.0f;
-//	uniforms[2].max.fvec3[0] = 1.0f;
-//	uniforms[2].max.fvec3[1] = 1.0f;
-//	uniforms[2].max.fvec3[2] = 1.0f;
-//	uniforms[3].name = "desaturation";
-//	uniforms[3].readableName = "Desaturation";
-//	uniforms[3].type = GL_FLOAT_VEC3;
-//	uniforms[3].value.fvec3[0] = 0.0f;
-//	uniforms[3].value.fvec3[1] = 0.0f;
-//	uniforms[3].value.fvec3[2] = 0.0f;
-//	uniforms[3].min.fvec3[0] = 0.0f;
-//	uniforms[3].min.fvec3[1] = 0.0f;
-//	uniforms[3].min.fvec3[2] = 0.0f;
-//	uniforms[3].max.fvec3[0] = 1.0f;
-//	uniforms[3].max.fvec3[1] = 1.0f;
-//	uniforms[3].max.fvec3[2] = 1.0f;
-	mGLES2ShaderInit(&context->initialShader, _vertexShader, _fragmentShader, -1, -1, false, uniforms, 1);
+	struct mGLES2Uniform* uniforms = malloc(sizeof(struct mGLES2Uniform) * 4);
+	uniforms[0].name = "gamma";
+	uniforms[0].readableName = "Gamma";
+	uniforms[0].type = GL_FLOAT;
+	uniforms[0].value.f = 1.0f;
+	uniforms[0].min.f = 0.1f;
+	uniforms[0].max.f = 3.0f;
+	uniforms[1].name = "scale";
+	uniforms[1].readableName = "Scale";
+	uniforms[1].type = GL_FLOAT_VEC3;
+	uniforms[1].value.fvec3[0] = 1.0f;
+	uniforms[1].value.fvec3[1] = 1.0f;
+	uniforms[1].value.fvec3[2] = 1.0f;
+	uniforms[1].min.fvec3[0] = -1.0f;
+	uniforms[1].min.fvec3[1] = -1.0f;
+	uniforms[1].min.fvec3[2] = -1.0f;
+	uniforms[1].max.fvec3[0] = 2.0f;
+	uniforms[1].max.fvec3[1] = 2.0f;
+	uniforms[1].max.fvec3[2] = 2.0f;
+	uniforms[2].name = "bias";
+	uniforms[2].readableName = "Bias";
+	uniforms[2].type = GL_FLOAT_VEC3;
+	uniforms[2].value.fvec3[0] = 0.0f;
+	uniforms[2].value.fvec3[1] = 0.0f;
+	uniforms[2].value.fvec3[2] = 0.0f;
+	uniforms[2].min.fvec3[0] = -1.0f;
+	uniforms[2].min.fvec3[1] = -1.0f;
+	uniforms[2].min.fvec3[2] = -1.0f;
+	uniforms[2].max.fvec3[0] = 1.0f;
+	uniforms[2].max.fvec3[1] = 1.0f;
+	uniforms[2].max.fvec3[2] = 1.0f;
+	uniforms[3].name = "desaturation";
+	uniforms[3].readableName = "Desaturation";
+	uniforms[3].type = GL_FLOAT_VEC3;
+	uniforms[3].value.fvec3[0] = 0.0f;
+	uniforms[3].value.fvec3[1] = 0.0f;
+	uniforms[3].value.fvec3[2] = 0.0f;
+	uniforms[3].min.fvec3[0] = 0.0f;
+	uniforms[3].min.fvec3[1] = 0.0f;
+	uniforms[3].min.fvec3[2] = 0.0f;
+	uniforms[3].max.fvec3[0] = 1.0f;
+	uniforms[3].max.fvec3[1] = 1.0f;
+	uniforms[3].max.fvec3[2] = 1.0f;
+	mGLES2ShaderInit(&context->initialShader, _vertexShader, _fragmentShader, -1, -1, false, uniforms, 4);
 	mGLES2ShaderInit(&context->finalShader, 0, 0, 0, 0, false, 0, 0);
 	mGLES2ShaderInit(&context->interframeShader, 0, _interframeFragmentShader, -1, -1, false, 0, 0);
 
@@ -1087,131 +1058,6 @@ bool mGLES2ShaderLoad(struct VideoShader* shader, struct VDir* dir) {
 	manifest->close(manifest);
 	ConfigurationDeinit(&description);
 	return success;
-}
-bool mGLES2ShaderLoadfromFile(struct VideoShader* shader) {
-//    struct VFile* manifest = dir->openFile(dir, "manifest.ini", O_RDONLY);
-    struct VFile* manifest = VFileOpen("sdcard/gba/shaders/scale2x.shader/manifest.ini",O_RDONLY);
-
-    if (!manifest) {
-        return false;
-    }
-    bool success = false;
-    struct Configuration description;
-    ConfigurationInit(&description);
-    if (ConfigurationReadVFile(&description, manifest)) {
-        int inShaders;
-        success = _lookupIntValue(&description, "shader", "passes", &inShaders);
-        if (inShaders > MAX_PASSES || inShaders < 1) {
-            success = false;
-        }
-        if (success) {
-            struct mGLES2Shader* shaderBlock = calloc(inShaders, sizeof(struct mGLES2Shader));
-            int n;
-            for (n = 0; n < inShaders; ++n) {
-                char passName[12];
-                snprintf(passName, sizeof(passName), "pass.%u", n);
-                const char* fs = ConfigurationGetValue(&description, passName, "fragmentShader");
-                const char* vs = ConfigurationGetValue(&description, passName, "vertexShader");
-                if (fs && (fs[0] == '.' || strstr(fs, PATH_SEP))) {
-                    success = false;
-                    break;
-                }
-                if (vs && (vs[0] == '.' || strstr(vs, PATH_SEP))) {
-                    success = false;
-                    break;
-                }
-                char* fssrc = 0;
-                char* vssrc = 0;
-                if (fs) {
-//                    struct VFile* fsf = dir->openFile(dir, fs, O_RDONLY);
-                    struct VFile* fsf = VFileOpen("sdcard/gba/shaders/scale2x.shader/scale2x.fs",O_RDONLY);
-                    if (!fsf) {
-                        success = false;
-                        break;
-                    }
-                    fssrc = malloc(fsf->size(fsf) + 1);
-                    fssrc[fsf->size(fsf)] = '\0';
-                    fsf->read(fsf, fssrc, fsf->size(fsf));
-                    fsf->close(fsf);
-                }
-//                if (vs) {
-//                    struct VFile* vsf = dir->openFile(dir, vs, O_RDONLY);
-//                    if (!vsf) {
-//                        success = false;
-//                        free(fssrc);
-//                        break;
-//                    }
-//                    vssrc = malloc(vsf->size(vsf) + 1);
-//                    vssrc[vsf->size(vsf)] = '\0';
-//                    vsf->read(vsf, vssrc, vsf->size(vsf));
-//                    vsf->close(vsf);
-//                }
-                int width = 0;
-                int height = 0;
-                int scaling = 0;
-                _lookupIntValue(&description, passName, "width", &width);
-                _lookupIntValue(&description, passName, "height", &height);
-                _lookupIntValue(&description, passName, "integerScaling", &scaling);
-                struct mGLES2UniformList uniformVector;
-                mGLES2UniformListInit(&uniformVector, 0);
-                ConfigurationEnumerateSections(&description, _uniformHandler, &uniformVector);
-                size_t u;
-                for (u = 0; u < mGLES2UniformListSize(&uniformVector); ++u) {
-                    struct mGLES2Uniform* uniform = mGLES2UniformListGetPointer(&uniformVector, u);
-                    if (!_loadUniform(&description, n, uniform)) {
-                        mGLES2UniformListShift(&uniformVector, u, 1);
-                        --u;
-                    }
-                }
-                u = mGLES2UniformListSize(&uniformVector);
-                struct mGLES2Uniform* uniformBlock;
-                if (u) {
-                    uniformBlock = calloc(u, sizeof(*uniformBlock));
-                    memcpy(uniformBlock, mGLES2UniformListGetPointer(&uniformVector, 0), sizeof(*uniformBlock) * u);
-                }
-                mGLES2UniformListDeinit(&uniformVector);
-
-                mGLES2ShaderInit(&shaderBlock[n], vssrc, fssrc, width, height, scaling, uniformBlock, u);
-                int b = 0;
-                _lookupIntValue(&description, passName, "blend", &b);
-                if (b) {
-                    shaderBlock[n].blend = b;
-                }
-                b = 0;
-                _lookupIntValue(&description, passName, "filter", &b);
-                if (b) {
-                    shaderBlock[n].filter = b;
-                }
-                free(fssrc);
-                free(vssrc);
-            }
-            if (success) {
-                shader->nPasses = inShaders;
-                shader->passes = shaderBlock;
-                shader->name = ConfigurationGetValue(&description, "shader", "name");
-                if (shader->name) {
-                    shader->name = strdup(shader->name);
-                }
-                shader->author = ConfigurationGetValue(&description, "shader", "author");
-                if (shader->author) {
-                    shader->author = strdup(shader->author);
-                }
-                shader->description = ConfigurationGetValue(&description, "shader", "description");
-                if (shader->description) {
-                    shader->description = strdup(shader->description);
-                }
-            } else {
-                inShaders = n;
-                for (n = 0; n < inShaders; ++n) {
-                    mGLES2ShaderDeinit(&shaderBlock[n]);
-                }
-                free(shaderBlock);
-            }
-        }
-    }
-    manifest->close(manifest);
-    ConfigurationDeinit(&description);
-    return success;
 }
 
 void mGLES2ShaderFree(struct VideoShader* shader) {
