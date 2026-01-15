@@ -1,9 +1,8 @@
 #include <oboe/Oboe.h>
 #include <mgba/core/core.h>
 #include <mgba/core/thread.h>
-#include <mgba/core/blip_buf.h>
-#include <mgba/internal/gba/audio.h> // For GBAAudioCalculateRatio
-#include <mgba/internal/gba/gba.h>   // For GBA_ARM7TDMI_FREQUENCY
+#include <mgba-util/audio-buffer.h>
+#include <mgba-util/audio-resampler.h>
 #include <android/log.h>
 
 #define TAG "OboeAudio"
@@ -12,128 +11,135 @@
 
 using namespace oboe;
 
-// Helper function to calculate ratio if GBA audio header isn't available or we want to inline it
-// But we included the header, so we should be good if the include path is correct in CMake.
-// If GBA_ARM7TDMI_FREQUENCY is not found, we might need to look at CMake includes.
+// Context to hold audio state, similar to mSDLAudio in sdl-audio.c
+struct OboeAudioContext {
+    struct mAudioBuffer buffer;
+    struct mAudioResampler resampler;
+    struct mCore* core;
+    struct mCoreSync* sync;
+    unsigned samples;     // Buffer size in samples
+    unsigned sampleRate;  // Output sample rate
+};
+
+static OboeAudioContext gContext = {0};
+static std::shared_ptr<AudioStream> mStream;
+static class OboeAudioStreamCallback* mCallback = nullptr;
 
 class OboeAudioStreamCallback : public AudioStreamCallback {
 public:
-    OboeAudioStreamCallback(struct mCoreThread* thread) : mThread(thread) {}
-
     DataCallbackResult onAudioReady(AudioStream *oboeStream, void *audioData, int32_t numFrames) override {
-        if (!mThread || !mThread->core) {
+        if (!gContext.core) {
             memset(audioData, 0, numFrames * oboeStream->getChannelCount() * sizeof(int16_t));
              return DataCallbackResult::Continue;
         }
 
-        int16_t *outputData = static_cast<int16_t *>(audioData);
-        struct mCore* core = mThread->core;
-        struct mCoreSync* sync = &mThread->impl->sync;
-        
-        // Logic adapted from _mSDLAudioCallback in sdl-audio.c
-        
-        blip_t* left = core->getAudioChannel(core, 0);
-        blip_t* right = core->getAudioChannel(core, 1);
-        
-        // Frequency might be core specific, but GBA is usually 16777216. 
-        // Using GBA_ARM7TDMI_FREQUENCY from gba.h if possible, else core->frequency()
-        int32_t clockRate = core->frequency(core);
-        
-        int sampleRate = oboeStream->getSampleRate();
-        double fauxClock = 1;
-        
-        if (sync && sync->fpsTarget > 0) {
-            // Re-implementing GBAAudioCalculateRatio logic or calling it if available.
-            // Assuming 59.7275Hz is standard GBA framerate.
-            // Ratio is target / native.
-            // Simplify: GBAAudioCalculateRatio(1, fpsTarget, 1) usually roughly 1.0
-            
-            // To imply logic:
-            // static double GBAAudioCalculateRatio(double sampleRate, double fps, double nativeFps)
-            // return sampleRate * nativeFps / fps;
-            
-            // SDL code: fauxClock = GBAAudioCalculateRatio(1, audioContext->sync->fpsTarget, 1);
-            // This suggests it adjusts the clock rate effectively changing pitch/speed.
-            // We can skip this for now or try to implement if we have the header.
-             fauxClock = 59.7275f / sync->fpsTarget; // Approx inverse of what SDL likely does?
-             // Actually, let's stick to standard rate if sync is disabled or 1.0.
-             if (fauxClock < 0.1 || fauxClock > 10.0) fauxClock = 1.0;
+        struct mAudioBuffer* coreBuffer = NULL;
+        unsigned coreSampleRate = 32768; // Default GBA rate
+
+        if (gContext.core) {
+            coreBuffer = gContext.core->getAudioBuffer(gContext.core);
+            coreSampleRate = gContext.core->audioSampleRate(gContext.core);
         }
 
-        mCoreSyncLockAudio(sync);
-
-        blip_set_rates(left, clockRate, sampleRate * fauxClock);
-        blip_set_rates(right, clockRate, sampleRate * fauxClock);
-
-        int available = blip_samples_avail(left);
-        if (available > numFrames) {
-            available = numFrames;
+        double fauxClock = 1.0;
+        if (gContext.sync) {
+             // Try to calculate framerate ratio for synchronization
+             if (gContext.sync->fpsTarget > 0 && gContext.core) {
+                 fauxClock = mCoreCalculateFramerateRatio(gContext.core, gContext.sync->fpsTarget);
+             }
+             
+             mCoreSyncLockAudio(gContext.sync);
+             
+             // Update high water mark for sync
+             // Logic adapted from sdl-audio.c
+             if (gContext.sampleRate > 0) {
+                 gContext.sync->audioHighWater = gContext.samples + gContext.resampler.highWaterMark + gContext.resampler.lowWaterMark + (gContext.samples >> 6);
+                 gContext.sync->audioHighWater *= coreSampleRate / (fauxClock * gContext.sampleRate);
+             }
         }
 
-        // mGBA blip_read_samples reads mono to buffer. Stereo needs interleaving or specific call.
-        // blip_read_samples signature: (blip_t*, short* out, int count, int stereo)
-        // If stereo=1, it writes stride 2? No, mGBA's blip_buf is mono.
-        // sdl-audio.c does:
-        // blip_read_samples(left, (short*) data, available, audioContext->obtainedSpec.channels == 2);
-        // blip_read_samples(right, ((short*) data) + 1, available, 1);
+        // Resample from core buffer to our local buffer
+        mAudioResamplerSetSource(&gContext.resampler, coreBuffer, coreSampleRate / fauxClock, true);
+        mAudioResamplerProcess(&gContext.resampler);
+
+        if (gContext.sync) {
+             mCoreSyncConsumeAudio(gContext.sync);
+        }
+
+        // Read from local buffer to Oboe output
+        // Oboe requests 'numFrames' frames. Each frame is 2 samples (Stereo).
+        // mAudioBufferRead 'samples' argument is number of frames if we consider the buffer is interleaved? 
+        // Checking audio-buffer.c: mAudioBufferRead(..., samples) -> bytes = samples * buffer->channels * sizeof(int16_t)
+        // So yes, 'samples' here means 'frames' for the buffer logic if channels=2.
         
-        // So yes, the 4th arg is 'stereo' stride.
-        
-        blip_read_samples(left, outputData, available, 1);
-        blip_read_samples(right, outputData + 1, available, 1);
-        
-        mCoreSyncConsumeAudio(sync);
-        
+        int available = mAudioBufferRead(&gContext.buffer, (int16_t*)audioData, numFrames);
+
         if (available < numFrames) {
-             memset(outputData + available * 2, 0, (numFrames - available) * 2 * sizeof(int16_t));
+             // Fill the rest with silence
+             memset(((int16_t*)audioData) + available * 2, 0, (numFrames - available) * 2 * sizeof(int16_t));
         }
 
         return DataCallbackResult::Continue;
     }
-    
-private:
-    struct mCoreThread* mThread;
 };
-
-// Global stream wrapper (for simplicity in this single-instance app)
-static std::shared_ptr<AudioStream> mStream;
-static OboeAudioStreamCallback* mCallback = nullptr;
 
 extern "C" {
 
 bool mOboeInit(struct mCoreThread* thread);
 void mOboeDeinit();
 
-// Since we are replacing SDL audio which is polled/callback based,
-// we need to adapt.
-
 bool mOboeInit(struct mCoreThread* thread) {
     LOGD("Initializing Oboe Audio");
     
+    // Initialize Context
+    memset(&gContext, 0, sizeof(gContext));
+    gContext.samples = 2048; // Buffer size, power of 2
+    gContext.sampleRate = 48000; // Standard Android rate
+    
+    if (thread) {
+        gContext.core = thread->core;
+        gContext.sync = &thread->impl->sync;
+    }
+
+    // Initialize mGBA audio components
+    mAudioBufferInit(&gContext.buffer, gContext.samples, 2); // 2 channels
+    mAudioResamplerInit(&gContext.resampler, mINTERPOLATOR_SINC);
+    mAudioResamplerSetDestination(&gContext.resampler, &gContext.buffer, gContext.sampleRate);
+
+    // Initialize Oboe
     AudioStreamBuilder builder;
     builder.setDirection(Direction::Output);
     builder.setPerformanceMode(PerformanceMode::LowLatency);
     builder.setSharingMode(SharingMode::Shared);
     builder.setFormat(AudioFormat::I16);
     builder.setChannelCount(ChannelCount::Stereo);
-    builder.setSampleRate(48000); // Standard for mGBA
+    builder.setSampleRate(gContext.sampleRate);
     
-    mCallback = new OboeAudioStreamCallback(thread);
+    mCallback = new OboeAudioStreamCallback();
     builder.setCallback(mCallback);
     
     Result result = builder.openStream(mStream);
     if (result != Result::OK) {
         LOGE("Failed to open Oboe stream: %s", convertToText(result));
+        mAudioBufferDeinit(&gContext.buffer);
+        mAudioResamplerDeinit(&gContext.resampler);
         return false;
     }
     
+    // Update sample rate if Oboe chose something else
+    gContext.sampleRate = mStream->getSampleRate();
+    mAudioResamplerSetDestination(&gContext.resampler, &gContext.buffer, gContext.sampleRate);
+
     result = mStream->requestStart();
     if (result != Result::OK) {
         LOGE("Failed to start Oboe stream: %s", convertToText(result));
+        mStream->close();
+        mAudioBufferDeinit(&gContext.buffer);
+        mAudioResamplerDeinit(&gContext.resampler);
         return false;
     }
     
-    LOGD("Oboe Audio Started");
+    LOGD("Oboe Audio Started at %d Hz", gContext.sampleRate);
     return true;
 }
 
@@ -146,6 +152,11 @@ void mOboeDeinit() {
         delete mCallback;
         mCallback = nullptr;
     }
+    
+    mAudioBufferDeinit(&gContext.buffer);
+    mAudioResamplerDeinit(&gContext.resampler);
+    memset(&gContext, 0, sizeof(gContext));
+    LOGD("Oboe Audio Deinitialized");
 }
 
 }
